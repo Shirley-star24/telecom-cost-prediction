@@ -1,0 +1,432 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "provenance": [],
+      "authorship_tag": "ABX9TyP4o5yPfm357AKWdvHI81le",
+      "include_colab_link": true
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python"
+    }
+  },
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/Shirley-star24/telecom-cost-prediction/blob/main/telecommunications_cost_predictions.pynb\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "**Data analysis of loan defalt data**                                  \n"
+      ],
+      "metadata": {
+        "id": "Hl43pGFuitUX"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "#  Predicting cell tower battery degradation or forecasting network backup-power costs."
+      ],
+      "metadata": {
+        "id": "3qNE7GbS6nzm"
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "***objectives***: The goal is to predict the remaining useful life (RUL) of a cell tower battery (in hours) or the daily diesel/battery operational cost (in ZAR)."
+      ],
+      "metadata": {
+        "id": "MKLiTg7NjmRy"
+      }
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "xe9dLxlKinG6",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "cd3cc786-0abe-4c86-d512-bdbb48396f53"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Requirement already satisfied: category_encoders in /usr/local/lib/python3.12/dist-packages (2.9.0)\n",
+            "Requirement already satisfied: numpy>=1.14.0 in /usr/local/lib/python3.12/dist-packages (from category_encoders) (2.0.2)\n",
+            "Requirement already satisfied: pandas>=1.0.5 in /usr/local/lib/python3.12/dist-packages (from category_encoders) (2.2.2)\n",
+            "Requirement already satisfied: patsy>=0.5.1 in /usr/local/lib/python3.12/dist-packages (from category_encoders) (1.0.2)\n",
+            "Requirement already satisfied: scikit-learn>=1.6.0 in /usr/local/lib/python3.12/dist-packages (from category_encoders) (1.6.1)\n",
+            "Requirement already satisfied: scipy>=1.0.0 in /usr/local/lib/python3.12/dist-packages (from category_encoders) (1.16.3)\n",
+            "Requirement already satisfied: statsmodels>=0.9.0 in /usr/local/lib/python3.12/dist-packages (from category_encoders) (0.14.6)\n",
+            "Requirement already satisfied: python-dateutil>=2.8.2 in /usr/local/lib/python3.12/dist-packages (from pandas>=1.0.5->category_encoders) (2.9.0.post0)\n",
+            "Requirement already satisfied: pytz>=2020.1 in /usr/local/lib/python3.12/dist-packages (from pandas>=1.0.5->category_encoders) (2025.2)\n",
+            "Requirement already satisfied: tzdata>=2022.7 in /usr/local/lib/python3.12/dist-packages (from pandas>=1.0.5->category_encoders) (2026.2)\n",
+            "Requirement already satisfied: joblib>=1.2.0 in /usr/local/lib/python3.12/dist-packages (from scikit-learn>=1.6.0->category_encoders) (1.5.3)\n",
+            "Requirement already satisfied: threadpoolctl>=3.1.0 in /usr/local/lib/python3.12/dist-packages (from scikit-learn>=1.6.0->category_encoders) (3.6.0)\n",
+            "Requirement already satisfied: packaging>=21.3 in /usr/local/lib/python3.12/dist-packages (from statsmodels>=0.9.0->category_encoders) (26.2)\n",
+            "Requirement already satisfied: six>=1.5 in /usr/local/lib/python3.12/dist-packages (from python-dateutil>=2.8.2->pandas>=1.0.5->category_encoders) (1.17.0)\n"
+          ]
+        }
+      ],
+      "source": [
+        "#importng all the necessary libraries\n",
+        "!pip install category_encoders\n",
+        "from glob import glob\n",
+        "import pandas as pd\n",
+        "import seaborn as sns\n",
+        "import numpy as np\n",
+        "from category_encoders import OneHotEncoder\n",
+        "from ipywidgets import Dropdown, FloatSlider, IntSlider, interact\n",
+        "from sklearn.impute import SimpleImputer\n",
+        "from sklearn.linear_model import LinearRegression, Ridge  # noqa F401\n",
+        "from sklearn.metrics import mean_absolute_error\n",
+        "from sklearn.pipeline import make_pipeline\n",
+        "from sklearn.utils.validation import check_is_fitted\n",
+        "\n",
+        "import plotly.express as px"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        ":CODE TO GENERATE SIMULATED DATA BASED ON THE CURRENT STATISTICS"
+      ],
+      "metadata": {
+        "id": "xC_AgqQjCfnH"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "\n",
+        "# 1. SETUP RAW DATA WITH EXACTLY 2500 ROWS\n",
+        "np.random.seed(42)\n",
+        "num_records = 2500\n",
+        "\n",
+        "regions = [f\"ZA_NODE_{i:02d}\" for i in range(1, 31)]\n",
+        "provinces = ['GP', 'WC', 'KZN', 'EC', 'LP', 'MP', 'NW', 'FS', 'NC']\n",
+        "districts = [\n",
+        "    'JHB_Metro', 'TSH_Metro', 'CPT_Metro', 'DUR_Metro', 'MAN_Metro',             # Urban Metros\n",
+        "    'DC34_Vhembe_Rural', 'DC47_Sekhukhune_Rural', 'DC15_O_R_Tambo_Rural',        # Deep Rural Districts\n",
+        "    'DC44_Alfred_Nzo_Rural', 'DC27_Umkhanyakude_Rural', 'DC30_Gert_Sibande_Rural'\n",
+        "]\n",
+        "contracts = ['Prepaid', 'TopUp', 'Postpaid']\n",
+        "\n",
+        "DATA = {\n",
+        "    'Avg_Price_ZAR': np.random.uniform(15, 120, num_records),\n",
+        "    'Data_Usage_TB': np.random.uniform(100000, 450000, num_records),\n",
+        "    'Consumer_Feedback': np.random.uniform(1.0, 5.0, num_records),\n",
+        "    'Contract_Type': np.random.choice(contracts, num_records, p=[0.6, 0.2, 0.2]),\n",
+        "    'Region_Code': np.random.choice(regions, num_records),\n",
+        "    'Is_Billing_Day': np.random.choice(['Yes', 'No'], num_records),\n",
+        "    'Sim_Serial_Prefix': [f\"SIM-{np.random.randint(10000, 99999)}\" for _ in range(num_records)],\n",
+        "    \"is_rural\":df['District_Code'].fillna('Unknown').str.contains('Rural'),\n",
+        "    \"rural_economic_friction\" : np.where(is_rural, -2500, 1200)\n",
+        "\n",
+        "}\n",
+        "df = pd.DataFrame(DATA)\n",
+        "\n",
+        "# Introduce \"Messy\" Data safely using explicit index generation\n",
+        "# This ensures exactly 10% and 8% of rows are affected\n",
+        "idx_price = np.random.choice(df.index, size=int(0.10 * num_records), replace=False)\n",
+        "idx_feedback = np.random.choice(df.index, size=int(0.08 * num_records), replace=False)\n",
+        "\n",
+        "#addding the provences and districts\n",
+        "nan_indices_prov = np.random.choice(df.index, size=num_nan_records, replace=False)\n",
+        "df.loc[nan_indices_prov, 'Province'] = np.nan\n",
+        "\n",
+        "nan_indices_dist = np.random.choice(df.index, size=num_nan_records, replace=False)\n",
+        "df.loc[nan_indices_dist, 'District_Code'] = np.nan\n",
+        "\n",
+        "df.loc[idx_price, 'Avg_Price_ZAR'] = np.nan\n",
+        "df.loc[idx_feedback, 'Consumer_Feedback'] = np.nan\n"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 547
+        },
+        "id": "EDk2DA_DCvTx",
+        "outputId": "089cd87f-e2c4-48b8-e5cc-3dfca5f748b7"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "error",
+          "ename": "KeyError",
+          "evalue": "'District_Code'",
+          "traceback": [
+            "\u001b[0;31m---------------------------------------------------------------------------\u001b[0m",
+            "\u001b[0;31mKeyError\u001b[0m                                  Traceback (most recent call last)",
+            "\u001b[0;32m/usr/local/lib/python3.12/dist-packages/pandas/core/indexes/base.py\u001b[0m in \u001b[0;36mget_loc\u001b[0;34m(self, key)\u001b[0m\n\u001b[1;32m   3804\u001b[0m         \u001b[0;32mtry\u001b[0m\u001b[0;34m:\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0;32m-> 3805\u001b[0;31m             \u001b[0;32mreturn\u001b[0m \u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0m_engine\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mget_loc\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mcasted_key\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m\u001b[1;32m   3806\u001b[0m         \u001b[0;32mexcept\u001b[0m \u001b[0mKeyError\u001b[0m \u001b[0;32mas\u001b[0m \u001b[0merr\u001b[0m\u001b[0;34m:\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n",
+            "\u001b[0;32mindex.pyx\u001b[0m in \u001b[0;36mpandas._libs.index.IndexEngine.get_loc\u001b[0;34m()\u001b[0m\n",
+            "\u001b[0;32mindex.pyx\u001b[0m in \u001b[0;36mpandas._libs.index.IndexEngine.get_loc\u001b[0;34m()\u001b[0m\n",
+            "\u001b[0;32mpandas/_libs/hashtable_class_helper.pxi\u001b[0m in \u001b[0;36mpandas._libs.hashtable.PyObjectHashTable.get_item\u001b[0;34m()\u001b[0m\n",
+            "\u001b[0;32mpandas/_libs/hashtable_class_helper.pxi\u001b[0m in \u001b[0;36mpandas._libs.hashtable.PyObjectHashTable.get_item\u001b[0;34m()\u001b[0m\n",
+            "\u001b[0;31mKeyError\u001b[0m: 'District_Code'",
+            "\nThe above exception was the direct cause of the following exception:\n",
+            "\u001b[0;31mKeyError\u001b[0m                                  Traceback (most recent call last)",
+            "\u001b[0;32m/tmp/ipykernel_1757/2930871957.py\u001b[0m in \u001b[0;36m<cell line: 0>\u001b[0;34m()\u001b[0m\n\u001b[1;32m     20\u001b[0m     \u001b[0;34m'Is_Billing_Day'\u001b[0m\u001b[0;34m:\u001b[0m \u001b[0mnp\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mrandom\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mchoice\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0;34m[\u001b[0m\u001b[0;34m'Yes'\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0;34m'No'\u001b[0m\u001b[0;34m]\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0mnum_records\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m,\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m     21\u001b[0m     \u001b[0;34m'Sim_Serial_Prefix'\u001b[0m\u001b[0;34m:\u001b[0m \u001b[0;34m[\u001b[0m\u001b[0;34mf\"SIM-{np.random.randint(10000, 99999)}\"\u001b[0m \u001b[0;32mfor\u001b[0m \u001b[0m_\u001b[0m \u001b[0;32min\u001b[0m \u001b[0mrange\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mnum_records\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m]\u001b[0m\u001b[0;34m,\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0;32m---> 22\u001b[0;31m     \u001b[0;34m\"is_rural\"\u001b[0m\u001b[0;34m:\u001b[0m\u001b[0mdf\u001b[0m\u001b[0;34m[\u001b[0m\u001b[0;34m'District_Code'\u001b[0m\u001b[0;34m]\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mfillna\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0;34m'Unknown'\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mstr\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mcontains\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0;34m'Rural'\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m,\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m\u001b[1;32m     23\u001b[0m     \u001b[0;34m\"rural_economic_friction\"\u001b[0m \u001b[0;34m:\u001b[0m \u001b[0mnp\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mwhere\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mis_rural\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0;34m-\u001b[0m\u001b[0;36m2500\u001b[0m\u001b[0;34m,\u001b[0m \u001b[0;36m1200\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m     24\u001b[0m \u001b[0;34m\u001b[0m\u001b[0m\n",
+            "\u001b[0;32m/usr/local/lib/python3.12/dist-packages/pandas/core/frame.py\u001b[0m in \u001b[0;36m__getitem__\u001b[0;34m(self, key)\u001b[0m\n\u001b[1;32m   4100\u001b[0m             \u001b[0;32mif\u001b[0m \u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mcolumns\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mnlevels\u001b[0m \u001b[0;34m>\u001b[0m \u001b[0;36m1\u001b[0m\u001b[0;34m:\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m   4101\u001b[0m                 \u001b[0;32mreturn\u001b[0m \u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0m_getitem_multilevel\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mkey\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0;32m-> 4102\u001b[0;31m             \u001b[0mindexer\u001b[0m \u001b[0;34m=\u001b[0m \u001b[0mself\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mcolumns\u001b[0m\u001b[0;34m.\u001b[0m\u001b[0mget_loc\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mkey\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m\u001b[1;32m   4103\u001b[0m             \u001b[0;32mif\u001b[0m \u001b[0mis_integer\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mindexer\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m:\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m   4104\u001b[0m                 \u001b[0mindexer\u001b[0m \u001b[0;34m=\u001b[0m \u001b[0;34m[\u001b[0m\u001b[0mindexer\u001b[0m\u001b[0;34m]\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n",
+            "\u001b[0;32m/usr/local/lib/python3.12/dist-packages/pandas/core/indexes/base.py\u001b[0m in \u001b[0;36mget_loc\u001b[0;34m(self, key)\u001b[0m\n\u001b[1;32m   3810\u001b[0m             ):\n\u001b[1;32m   3811\u001b[0m                 \u001b[0;32mraise\u001b[0m \u001b[0mInvalidIndexError\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mkey\u001b[0m\u001b[0;34m)\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0;32m-> 3812\u001b[0;31m             \u001b[0;32mraise\u001b[0m \u001b[0mKeyError\u001b[0m\u001b[0;34m(\u001b[0m\u001b[0mkey\u001b[0m\u001b[0;34m)\u001b[0m \u001b[0;32mfrom\u001b[0m \u001b[0merr\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m\u001b[1;32m   3813\u001b[0m         \u001b[0;32mexcept\u001b[0m \u001b[0mTypeError\u001b[0m\u001b[0;34m:\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m   3814\u001b[0m             \u001b[0;31m# If we have a listlike key, _check_indexing_error will raise\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n",
+            "\u001b[0;31mKeyError\u001b[0m: 'District_Code'"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "df.info()"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "6n1sYvOYEkYh",
+        "outputId": "edad217a-a5f3-4d49-cbea-d386d3a5bb4a"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "<class 'pandas.core.frame.DataFrame'>\n",
+            "RangeIndex: 2500 entries, 0 to 2499\n",
+            "Data columns (total 7 columns):\n",
+            " #   Column             Non-Null Count  Dtype  \n",
+            "---  ------             --------------  -----  \n",
+            " 0   Avg_Price_ZAR      2250 non-null   float64\n",
+            " 1   Data_Usage_TB      2500 non-null   float64\n",
+            " 2   Consumer_Feedback  2300 non-null   float64\n",
+            " 3   Contract_Type      2500 non-null   object \n",
+            " 4   Region_Code        2500 non-null   object \n",
+            " 5   Is_Billing_Day     2500 non-null   object \n",
+            " 6   Sim_Serial_Prefix  2500 non-null   object \n",
+            "dtypes: float64(3), object(4)\n",
+            "memory usage: 136.8+ KB\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "df.head()"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 206
+        },
+        "id": "K1RvtI0hFSk8",
+        "outputId": "96c275bc-24ad-4ab7-dc72-fd3732362a50"
+      },
+      "execution_count": null,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "   Avg_Price_ZAR  Data_Usage_TB  Consumer_Feedback Contract_Type Region_Code\n",
+              "0      54.326712  389631.622737           2.574542       Prepaid  ZA_NODE_23\n",
+              "1     114.825002  367584.728129           2.893743      Postpaid  ZA_NODE_04\n",
+              "2      91.859364  300735.133009           4.418190       Prepaid  ZA_NODE_18\n",
+              "3      77.859141  434616.500264           2.360018       Prepaid  ZA_NODE_05\n",
+              "4            NaN  170166.080435           4.478599       Prepaid  ZA_NODE_16"
+            ],
+            "text/html": [
+              "\n",
+              "  <div id=\"df-98cc7c92-3934-4dff-99cc-03844bb768b8\" class=\"colab-df-container\">\n",
+              "    <div>\n",
+              "<style scoped>\n",
+              "    .dataframe tbody tr th:only-of-type {\n",
+              "        vertical-align: middle;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe tbody tr th {\n",
+              "        vertical-align: top;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe thead th {\n",
+              "        text-align: right;\n",
+              "    }\n",
+              "</style>\n",
+              "<table border=\"1\" class=\"dataframe\">\n",
+              "  <thead>\n",
+              "    <tr style=\"text-align: right;\">\n",
+              "      <th></th>\n",
+              "      <th>Avg_Price_ZAR</th>\n",
+              "      <th>Data_Usage_TB</th>\n",
+              "      <th>Consumer_Feedback</th>\n",
+              "      <th>Contract_Type</th>\n",
+              "      <th>Region_Code</th>\n",
+              "    </tr>\n",
+              "  </thead>\n",
+              "  <tbody>\n",
+              "    <tr>\n",
+              "      <th>0</th>\n",
+              "      <td>54.326712</td>\n",
+              "      <td>389631.622737</td>\n",
+              "      <td>2.574542</td>\n",
+              "      <td>Prepaid</td>\n",
+              "      <td>ZA_NODE_23</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>1</th>\n",
+              "      <td>114.825002</td>\n",
+              "      <td>367584.728129</td>\n",
+              "      <td>2.893743</td>\n",
+              "      <td>Postpaid</td>\n",
+              "      <td>ZA_NODE_04</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>2</th>\n",
+              "      <td>91.859364</td>\n",
+              "      <td>300735.133009</td>\n",
+              "      <td>4.418190</td>\n",
+              "      <td>Prepaid</td>\n",
+              "      <td>ZA_NODE_18</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>3</th>\n",
+              "      <td>77.859141</td>\n",
+              "      <td>434616.500264</td>\n",
+              "      <td>2.360018</td>\n",
+              "      <td>Prepaid</td>\n",
+              "      <td>ZA_NODE_05</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>4</th>\n",
+              "      <td>NaN</td>\n",
+              "      <td>170166.080435</td>\n",
+              "      <td>4.478599</td>\n",
+              "      <td>Prepaid</td>\n",
+              "      <td>ZA_NODE_16</td>\n",
+              "    </tr>\n",
+              "  </tbody>\n",
+              "</table>\n",
+              "</div>\n",
+              "    <div class=\"colab-df-buttons\">\n",
+              "\n",
+              "  <div class=\"colab-df-container\">\n",
+              "    <button class=\"colab-df-convert\" onclick=\"convertToInteractive('df-98cc7c92-3934-4dff-99cc-03844bb768b8')\"\n",
+              "            title=\"Convert this dataframe to an interactive table.\"\n",
+              "            style=\"display:none;\">\n",
+              "\n",
+              "  <svg xmlns=\"http://www.w3.org/2000/svg\" height=\"24px\" viewBox=\"0 -960 960 960\">\n",
+              "    <path d=\"M120-120v-720h720v720H120Zm60-500h600v-160H180v160Zm220 220h160v-160H400v160Zm0 220h160v-160H400v160ZM180-400h160v-160H180v160Zm440 0h160v-160H620v160ZM180-180h160v-160H180v160Zm440 0h160v-160H620v160Z\"/>\n",
+              "  </svg>\n",
+              "    </button>\n",
+              "\n",
+              "  <style>\n",
+              "    .colab-df-container {\n",
+              "      display:flex;\n",
+              "      gap: 12px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert {\n",
+              "      background-color: #E8F0FE;\n",
+              "      border: none;\n",
+              "      border-radius: 50%;\n",
+              "      cursor: pointer;\n",
+              "      display: none;\n",
+              "      fill: #1967D2;\n",
+              "      height: 32px;\n",
+              "      padding: 0 0 0 0;\n",
+              "      width: 32px;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-convert:hover {\n",
+              "      background-color: #E2EBFA;\n",
+              "      box-shadow: 0px 1px 2px rgba(60, 64, 67, 0.3), 0px 1px 3px 1px rgba(60, 64, 67, 0.15);\n",
+              "      fill: #174EA6;\n",
+              "    }\n",
+              "\n",
+              "    .colab-df-buttons div {\n",
+              "      margin-bottom: 4px;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert {\n",
+              "      background-color: #3B4455;\n",
+              "      fill: #D2E3FC;\n",
+              "    }\n",
+              "\n",
+              "    [theme=dark] .colab-df-convert:hover {\n",
+              "      background-color: #434B5C;\n",
+              "      box-shadow: 0px 1px 3px 1px rgba(0, 0, 0, 0.15);\n",
+              "      filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.3));\n",
+              "      fill: #FFFFFF;\n",
+              "    }\n",
+              "  </style>\n",
+              "\n",
+              "    <script>\n",
+              "      const buttonEl =\n",
+              "        document.querySelector('#df-98cc7c92-3934-4dff-99cc-03844bb768b8 button.colab-df-convert');\n",
+              "      buttonEl.style.display =\n",
+              "        google.colab.kernel.accessAllowed ? 'block' : 'none';\n",
+              "\n",
+              "      async function convertToInteractive(key) {\n",
+              "        const element = document.querySelector('#df-98cc7c92-3934-4dff-99cc-03844bb768b8');\n",
+              "        const dataTable =\n",
+              "          await google.colab.kernel.invokeFunction('convertToInteractive',\n",
+              "                                                    [key], {});\n",
+              "        if (!dataTable) return;\n",
+              "\n",
+              "        const docLinkHtml = 'Like what you see? Visit the ' +\n",
+              "          '<a target=\"_blank\" href=https://colab.research.google.com/notebooks/data_table.ipynb>data table notebook</a>'\n",
+              "          + ' to learn more about interactive tables.';\n",
+              "        element.innerHTML = '';\n",
+              "        dataTable['output_type'] = 'display_data';\n",
+              "        await google.colab.output.renderOutput(dataTable, element);\n",
+              "        const docLink = document.createElement('div');\n",
+              "        docLink.innerHTML = docLinkHtml;\n",
+              "        element.appendChild(docLink);\n",
+              "      }\n",
+              "    </script>\n",
+              "  </div>\n",
+              "\n",
+              "\n",
+              "    </div>\n",
+              "  </div>\n"
+            ],
+            "application/vnd.google.colaboratory.intrinsic+json": {
+              "type": "dataframe",
+              "variable_name": "df",
+              "summary": "{\n  \"name\": \"df\",\n  \"rows\": 2500,\n  \"fields\": [\n    {\n      \"column\": \"Avg_Price_ZAR\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 30.416842195194366,\n        \"min\": 15.164336045104655,\n        \"max\": 119.93844120591999,\n        \"num_unique_values\": 2250,\n        \"samples\": [\n          106.84367563184094,\n          85.52857186261495,\n          97.86298005377051\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"Data_Usage_TB\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 100947.03232759458,\n        \"min\": 100004.07216437814,\n        \"max\": 449845.1961376535,\n        \"num_unique_values\": 2500,\n        \"samples\": [\n          310857.3046883057,\n          228586.75504397467,\n          260450.9984460033\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"Consumer_Feedback\",\n      \"properties\": {\n        \"dtype\": \"number\",\n        \"std\": 1.153516121265408,\n        \"min\": 1.0009640187405382,\n        \"max\": 4.9978427242386925,\n        \"num_unique_values\": 2300,\n        \"samples\": [\n          3.5187343810368117,\n          2.2393884670131197,\n          2.642926173964048\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"Contract_Type\",\n      \"properties\": {\n        \"dtype\": \"category\",\n        \"num_unique_values\": 3,\n        \"samples\": [\n          \"Prepaid\",\n          \"Postpaid\",\n          \"TopUp\"\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    },\n    {\n      \"column\": \"Region_Code\",\n      \"properties\": {\n        \"dtype\": \"category\",\n        \"num_unique_values\": 30,\n        \"samples\": [\n          \"ZA_NODE_20\",\n          \"ZA_NODE_08\",\n          \"ZA_NODE_28\"\n        ],\n        \"semantic_type\": \"\",\n        \"description\": \"\"\n      }\n    }\n  ]\n}"
+            }
+          },
+          "metadata": {},
+          "execution_count": 13
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [],
+      "metadata": {
+        "id": "12HpRimcIvxa"
+      },
+      "execution_count": null,
+      "outputs": []
+    }
+  ]
+}
